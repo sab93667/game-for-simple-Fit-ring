@@ -1,13 +1,16 @@
 # 開始介面 + 連線
 # 一般 健身環 mode
 import pygame as pg
-import random, socket, time
+import simpleServer as ss
+import random, socket, time, pymouse, pykeyboard, os, sys, webbrowser
 from math import *
 from pygame import event
 from pygame.locals import K_ESCAPE, KEYDOWN, MOUSEBUTTONDOWN, QUIT
 from pygame.math import *
 from os import getcwd
-import simpleServer as ss
+from pymouse import *
+from pykeyboard import PyKeyboard
+from pynput import mouse
 
 pg.font.init()
 WINDOW_SIZE = (720, 480)
@@ -15,6 +18,7 @@ WHITE = (255, 255, 255)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
+preview_color = (124, 252, 0)
 HIT = getcwd().replace('\\', '/') + '/hit.wav' 
 BG = getcwd().replace('\\', '/') + '/bg.png' 
 BG2 = getcwd().replace('\\', '/') + '/bg2.png' 
@@ -28,6 +32,9 @@ title_font = pg.font.Font(getcwd().replace('\\', '/') + "/msjhbd.ttc", int(WINDO
 Start_loc = [[WINDOW_SIZE[0]*i/9 , 10] for i in range(9) ]
 pivot = (360 , 450)                                      # 軸心
 offset = Vector2((0, int(WINDOW_SIZE[0]/8)))                                # 偏移 (武器長度的一半)
+opened = False
+btn_preview = 1
+client = None
 
 Host = '192.168.137.1'
 Port = 5438
@@ -59,6 +66,7 @@ class Weapon(pg.sprite.Sprite):
         self.image = rotated_weapon
         #print(self.rect)
         #return rotated_weapon, self.rect
+
     def rotation2(self, direc):
         self.total_angle = direc
         rotated_weapon = pg.transform.rotate(self.org_image, self.total_angle)
@@ -68,7 +76,7 @@ class Weapon(pg.sprite.Sprite):
         self.image = rotated_weapon
 
     def turn_r(self):
-        self.total_angle -= (self.total_angle+90)/3
+        self.total_angle -= (self.total_angle+90)/4.5
         #print(self.total_angle)
         if self.total_angle <= -89:
             self.total_angle = -90
@@ -81,7 +89,7 @@ class Weapon(pg.sprite.Sprite):
             
     def turn_l(self):
         #print(333, self.total_angle)
-        self.total_angle += (90-self.total_angle)/3
+        self.total_angle += (90-self.total_angle)/4.5
         if self.total_angle >= 89:
             self.total_angle = 90
             self.TL = False
@@ -151,7 +159,6 @@ class Enemy(pg.sprite.Sprite):
         self.rect.x -= cos(theta) * self.speed*5 if theta> 0 else cos(theta) * self.speed * -7
         self.rect.y -= sin(theta) * self.speed*5 if theta> 0 else sin(theta) * self.speed * -7
 
-
 class Interface(pg.sprite.Sprite):
     def __init__(self, img):
         super().__init__()
@@ -173,33 +180,46 @@ class Interface(pg.sprite.Sprite):
     def pause(self):
         pass 
 
-def start(interface):
+def start(interface, client = None):
     # 建立畫布bg
-    global screen, WINDOW_SIZE, run, score_font, title_font
+    global screen, WINDOW_SIZE, run, score_font, title_font, opened, btn_preview
     bg1 = pg.image.load(BG).convert_alpha()
+    
     #bg1 = pg.Surface(screen.get_size())
     bg1 = pg.transform.scale(bg1, WINDOW_SIZE)
     #bg1 = bg1.convert()
     #bg1.fill(WHITE)
-
+    #bg1.set_alpha(5)
     screen.blit(bg1, (0,0))
     pg.display.update()
+    
     while run:
         #bg1 = pg.Surface(screen.get_size())
         #bg1 = bg1.convert()
         #bg1.fill(WHITE)
         #bg1 = pg.transform.scale(bg1, WINDOW_SIZE)
-        BTN_mode1 = pg.Rect(WINDOW_SIZE[0]/5, WINDOW_SIZE[1]/2, WINDOW_SIZE[0]*3/5, WINDOW_SIZE[1]/8)                 # 健身環MODE
-        BTN_mode2 = pg.Rect(WINDOW_SIZE[0]/5, WINDOW_SIZE[1]/1.4, WINDOW_SIZE[0]*3/5, WINDOW_SIZE[1]/8)                # 一般MODE
+        #screen.blit(bg1, (0,0))
+        BTN_mode1 = pg.Rect(WINDOW_SIZE[0]/5, WINDOW_SIZE[1]/2.5, WINDOW_SIZE[0]*3/5, WINDOW_SIZE[1]/8)                 # 健身環MODE
+        BTN_mode2 = pg.Rect(WINDOW_SIZE[0]/5, WINDOW_SIZE[1]/1.8, WINDOW_SIZE[0]*3/5, WINDOW_SIZE[1]/8)                # 一般MODE
+        BTN_mode3 = pg.Rect(WINDOW_SIZE[0]/5, WINDOW_SIZE[1]/1.4, WINDOW_SIZE[0]*3/5, WINDOW_SIZE[1]/8)                # 恐龍 MODE
         pg.draw.rect(bg1, BLUE, BTN_mode1, 4)
         pg.draw.rect(bg1, BLUE, BTN_mode2, 4)
+        pg.draw.rect(bg1, BLUE, BTN_mode3, 4)
         screen.blit(bg1, (0,0))
         game_name = title_font.render('健身環大冒險(暫)', True, (0, 0, 0))  # 大小需要調整
         text_mode1 = title_font.render('健身環模式', True, (0, 0, 0))
         text_mode2 = title_font.render('一般模式', True, (0, 0, 0))
-        screen.blit(game_name, (WINDOW_SIZE[0]/4, WINDOW_SIZE[1]/4))
-        screen.blit(text_mode1, (WINDOW_SIZE[0]/2.5, WINDOW_SIZE[1]/2))
-        screen.blit(text_mode2, (WINDOW_SIZE[0]/2.5, WINDOW_SIZE[1]/1.4))
+        text_mode3 = title_font.render('小恐龍', True, (0, 0, 0))
+        screen.blit(game_name, (WINDOW_SIZE[0]/3.5, WINDOW_SIZE[1]/4))
+        screen.blit(text_mode1, (WINDOW_SIZE[0]/2.7, WINDOW_SIZE[1]/2.5))
+        screen.blit(text_mode2, (WINDOW_SIZE[0]/2.5, WINDOW_SIZE[1]/1.8))
+        screen.blit(text_mode3, (WINDOW_SIZE[0]/2.3, WINDOW_SIZE[1]/1.4))
+        if btn_preview == 1:
+            pg.draw.rect(screen, preview_color, BTN_mode1, 10)
+        elif btn_preview == 2:
+            pg.draw.rect(screen, preview_color, BTN_mode2, 10)
+        elif btn_preview == 3:
+            pg.draw.rect(screen, preview_color, BTN_mode3, 10)
         pg.display.update()
         for event in pg.event.get():
             if event.type == KEYDOWN:           # 觸發關閉視窗
@@ -216,6 +236,11 @@ def start(interface):
                     interface.mode = 2
                     print("Mode 2")
                     return
+                elif event.button == 1 and BTN_mode3.collidepoint(event.pos):
+                    interface.mode = 3
+                    opened = True
+                    print("Mode 3")
+                    return
             elif event.type == pg.VIDEORESIZE:
                 WINDOW_SIZE = event.size
                 score_font = pg.font.SysFont("Broadway", int(WINDOW_SIZE[0]/30))
@@ -224,10 +249,60 @@ def start(interface):
                 screen = pg.display.set_mode(WINDOW_SIZE, pg.RESIZABLE, 32)
                 bg1 = pg.transform.scale(bg1, WINDOW_SIZE)
 
+        if not client:
+            #print("connecting", client)
+            try:
+                client = ss.connect(Host, Port, 5)
+            except:
+                pass
+        else:
+            #print("connected")
+            ring = ss.get(client)
+            if ring:
+                ring  = ring.replace("\n", ",").strip().split(",")[-5:-1]
+                x_ang = float(ring[0])
+                squeeze = float(ring[1])
+                ang_v = float(ring[2])
+                angle = float(ring[3])
+                print(x_ang, squeeze, ang_v, angle)
+                if x_ang < -30 and btn_preview > 1:
+                    print("up")
+                    btn_preview -= 1
+                elif x_ang > 50 and btn_preview < 3:
+                    print("down")
+                    btn_preview += 1
+                # 上下選
+                if squeeze > 3300:
+                    interface.mode = btn_preview
+                    print("Mode", interface.mode)
+                    #client.close()
+                    #client = None
+                    return client
+        pg.display.update()
         
-def game1(interface):  # 已知問題  開始縮放有問題 速度隨分數增加
+
+def dino(interface, client):
+    k = PyKeyboard()
+    #interface.mode = 0
+    while run:
+        ring = ss.get(client)
+        if ring:
+            ring  = ring.replace("\n", ",").strip().split(",")[-5:-1]
+            x_ang = float(ring[0])
+            squeeze = float(ring[1])
+            ang_v = float(ring[2])
+            angle = float(ring[3])
+            if squeeze > 3250:
+                k.press_key(k.up_key) 
+                k.release_key(k.up_key)
+            if x_ang > 60 or x_ang < -50:
+                interface.mode = 0
+                return client 
+    
+
+def game1(interface, cli):  # 已知問題  開始縮放有問題 速度隨分數增加
     # 遊戲bg
-    global run, screen, WINDOW_SIZE, pivot, offset, Start_loc, all_sprites, block_list, score_font, title_font
+    global run, screen, WINDOW_SIZE, pivot, offset, Start_loc, all_sprites, block_list, score_font, title_font, opened
     bg2 = pg.image.load(BG2).convert_alpha()
     bg2 = pg.transform.scale(bg2, WINDOW_SIZE)
     hit = pg.mixer.Sound(HIT)
@@ -240,7 +315,6 @@ def game1(interface):  # 已知問題  開始縮放有問題 速度隨分數增�
     w1 = Weapon(WEAPON)
     interface.hp = 3
     interface.score = 0
-
     # 敵方
     enemies = [Enemy(Start_loc[i], ENEMY_IMG[i]) for i in range(9)]
     beaten = []
@@ -251,7 +325,7 @@ def game1(interface):  # 已知問題  開始縮放有問題 速度隨分數增�
     block_list.empty()
     all_sprites.add(w1)
     Left = True
-
+    #print(interface.mode)
     if interface.mode == 1:
         bg3 = pg.Surface(screen.get_size())
         bg3 = bg3.convert()
@@ -261,13 +335,14 @@ def game1(interface):  # 已知問題  開始縮放有問題 速度隨分數增�
         text_con = title_font.render('校正中 請將健身環平舉至胸前', True, (255, 0, 0))
         screen.blit(text_con, (WINDOW_SIZE[0]/8, WINDOW_SIZE[1]/5))
         pg.display.update()
+        interface.cli = cli
         w1.correction(interface)
         text_con = title_font.render('校正完成!!', True, (0, 0, 255))
         screen.blit(text_con, (WINDOW_SIZE[0]/3, WINDOW_SIZE[1]/2))
         pg.display.update()
         pg.time.wait(1000)
 
-    while run:
+    while run and (interface.mode == 1 or interface.mode == 2):
         for event in pg.event.get():
             if event.type == KEYDOWN:           # 觸發關閉視窗
                 if event.key == K_ESCAPE:
@@ -405,9 +480,9 @@ def game1(interface):  # 已知問題  開始縮放有問題 速度隨分數增�
             screen.blit(text, (WINDOW_SIZE[0]*0.3, WINDOW_SIZE[1]*0.6))
             pg.display.update()
             pg.time.wait(1500)
-            if interface.mode == 1:
-                interface.cli.close()
-            return
+            #if interface.mode == 1:
+                #interface.cli.close()
+            return interface.cli
         
 
 if __name__ == '__main__':
@@ -419,6 +494,7 @@ if __name__ == '__main__':
     all_sprites = pg.sprite.Group()                # 所有角色
 
     interface = Interface(HEART)
+    C = None
     """
     pg.font.init()
     pg.joystick.init()
@@ -427,8 +503,11 @@ if __name__ == '__main__':
     run = True
     while run:
         if interface.mode == 0:
-            start(interface)
-        if interface.mode == 1 or interface.mode == 2:
-            game1(interface)
-
+            C = start(interface, C)
+        if interface.mode == 1 or interface.mode == 2 :#or interface.mode == 3:
+            C = game1(interface, C)
+        if interface.mode == 3:
+            webbrowser.open_new_tab('https://chromedino.com/')
+            C = dino(interface, C)
+            opened = False
     quit()   
